@@ -1,11 +1,11 @@
-"""Day 09 - National forecast table parser.
+"""Day 09 - Daily weather forecast parser.
 
-Newspaper weather tables pack three facts into one token: "98/74/t" is a
-high of 98F, a low of 74F, and a sky code (t = thunderstorms). Each city
-carries today's forecast and the next day's. This parses that grid, guards
-the messy tokens instead of crashing on them, and answers the questions a
-reader actually asks: who is hottest, where is the sky turning, and which
-city swings most from today to tomorrow.
+A daily forecast packs three facts into one token: "98/74/t" is a high of
+98F, a low of 74F, and a sky code (t = thunderstorms). Each city carries
+today's forecast and the next day's. This parses that grid, guards the
+messy tokens instead of crashing on them, and answers the questions you
+actually ask: who is hottest, where is the sky turning, and which city
+swings most from today to tomorrow.
 
 Standard library only. Run: python day09_forecast_table.py
 """
@@ -15,7 +15,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
-# Sky codes as printed in the paper's legend.
+# Sky codes as printed in the forecast legend.
 SKY = {
     "s": "sunny", "pc": "partly cloudy", "c": "cloudy", "sh": "showers",
     "t": "t-storms", "r": "rain", "sn": "snow", "f": "flurries",
