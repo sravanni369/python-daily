@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
     print("\nWhat does work - name the positive class at the metric:")
     fixed = encode_and_score(truth, pred, ("legit", "fraud"), pos_label="fraud")
-    print(f"  precision_score(..., pos_label=le.transform(['fraud'])[0])")
+    print("  recall_score(y_true, y_pred, pos_label=le.transform(['fraud'])[0])")
     print(f"  -> scoring {fixed['scoring']!r}: precision {fixed['precision']:.3f}, "
           f"recall {fixed['recall']:.3f}, f1 {fixed['f1']:.3f}")
     print("  That matches the No/Yes row, which is the point: the model was always the same.")
