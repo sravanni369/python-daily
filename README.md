@@ -27,6 +27,7 @@ One focused Python exercise per day. Each file is self-contained and runnable: `
 | 18b | book_check_fillna_inplace.py | The same book's cleaning block run verbatim on current pandas (*Data Engineering Made Simple: SQL, Python, PySpark*, ch. 7, p. 41): `patients['Diagnosis'].fillna('Unknown', inplace=True)` fills 3 of 3 nulls on pandas 2.3.1 with only a FutureWarning, and fills 0 of 3 under Copy-on-Write - the pandas 3.0 default - raising ChainedAssignmentError and leaving the frame untouched. The chained selection is filled and discarded. Assigning the result back works in both modes. [VS Code run](screenshots/day18_book_cleaning_check.png) |
 | 19 | day19_accuracy_of_one_row.py | **"Accuracy: 1.0" printed from a test set of one row** (*Machine Learning: The 3 Core Paradigms*, Zarnappa Earnoor, p. 5, "Paradigm 1 - Supervised Learning - Python code example"). Nothing here is deprecated and nothing raises: the block runs and prints a number. Its `X` has four rows, so `test_size=0.25` hands the metric **one** prediction to score, and an accuracy over one row has exactly **two reachable values**. Run verbatim it prints **1.0**. Sweep `random_state` 0-99 with the model, the data and the split fraction untouched and the same line prints **1.0 on 70 seeds and 0.0 on 30** - no other value ever appears, so the score is a property of the seed rather than of the model. Scaling the identical pattern up on breast cancer (569x30, majority baseline 0.627), the reported score's sd falls **0.454 -> 0.217 -> 0.145 -> 0.080 -> 0.052 -> 0.022** as the test set grows from 1 to 100 rows - a 20x tightening driven only by test-set size, since it is the same forest with the same seed on every line. At the book's own n=4, **58 of 200** seeds train on a single class and still print an accuracy. The catch is that the means agree with repeated 5-fold (0.927 vs 0.930 at n=40): one split is not biased, it is unbiased and *wide*, and you do not publish the mean - you publish one draw from a range that runs **[0.600, 1.000]** for a model that never changed. Distinct from Day 16, which is bias in the *choice* of model; this is variance and resolution in the *measurement*. [VS Code run](screenshots/day19_accuracy_of_one_row.png) |
 | 19b | day19_three_paradigms.py | **All three of the guide's code blocks, implemented and run** (*The 3 Core Paradigms*, pp. 5, 8, 10). Every block executes and every block prints a confident result; none of the three ever scores the model on a row it had not already seen. **p.5 supervised** - accuracy on 1 held-out row (above). **p.8 unsupervised** - `KMeans(n_clusters=3)` on nine points has no evaluation step at all, and `n_init` resolves to **1** because the book never sets it; silhouette across k=2..5 scores **0.6733 / 0.7775 / 0.6750 / 0.5349**, so the book's k=3 is right on its own data - but its output prints nothing that would have said so either way. **p.10 deep learning** - `from tensorflow.keras.models import Sequential` raises `ModuleNotFoundError` on this machine, so the net is rebuilt in PyTorch with the same 65 parameters (8-relu/4-relu/1-sigmoid, Adam, BCE). At the book's `epochs=100` it has **not converged**: loss **0.6845** against chance at ln2 = **0.6931**, and it prints the book's `[0 0 1 1]` on only **2 of 20** seeds - it takes ~**500 epochs**, 5x the book's number, to reproduce the output printed beneath the snippet. Converged, `predict(X)` runs on the same four rows `fit()` trained on, which is reading back its own labels; leave-one-out on those rows reports **3/4** at 2000 epochs, while the 0/4 at the book's 100 epochs is an **underfitting artifact** (mean fold loss 0.6412), not a generalisation failure. [VS Code run](screenshots/day19_three_paradigms.png) |
+| 20 | day20_sparse_matrix_netflix.py | **The Netflix sparse-matrix claim, measured on a real downloaded dataset** (*Machine Learning with Python Cookbook*, Recipe 1.3 "Creating a Sparse Matrix", PDF p.6, plus the same book's URL-download method, ch. 3.0 p.37). The book motivates CSR with a Netflix users x movies matrix and "significant computational savings", then demonstrates it on a 3x2 array holding two non-zero values, and measures nothing. Downloading the book's own Titanic CSV and one-hot encoding `Name` gives a real 1,313 x 1,310 people-by-items matrix that is **99.92% zero**: dense 13.12 MB vs CSR 0.02 MB, **655x smaller**, both measured, round-trip lossless. The book also never says the saving has a limit - CSR stores a value *and* a column index per non-zero, so it crosses over and becomes **more** expensive than dense at **~67% density** (predicted 1.35x at 90%, measured 1.35x). And the 3x2 toy never exposes that `csr_matrix` silently **sums duplicate coordinates**: three separate `(0,5)` events store one cell of value 3 - correct for watch counts, silent corruption for ratings. |
 | — | labelencoder_alphabet.py | `LabelEncoder` assigns the positive class by the alphabet, and the book's own fix does not fix it (*Low-Code AI*, ch. 6, PDF p. 247). The book says "Yes is being treated as the positive class, or 1" - true only because Y sorts after N. On one identical model over 5,000 rows, recall reads **0.544** when the event word sorts last and **0.954** when it sorts first: a fraud detector finding 54% of fraud reports 95%, because sklearn's metrics default to `pos_label=1` and are quietly scoring the legitimate rows. The book's aside - "ensure the order by fitting on ['No','Yes']" - was tested both ways on scikit-learn 1.8.0 and changes nothing, because `LabelEncoder` sorts whatever you fit it on. Naming the class at the metric restores 0.544. [VS Code run](screenshots/labelencoder_alphabet.png) |
 | — | keras_lr_silent_default.py | The book's compile line does not run, and the obvious repair is not the book's model (*Deep Learning Illustrated*, Krohn, Beyleveld & Bassens, ch. 8, Examples 8.1-8.2, pp. 127-128). `SGD(lr=0.1)` raises `ValueError: Argument(s) not recognized: {'lr': 0.1}` on Keras 3.15.1 - `lr` was removed. The message names the argument it rejected but not `learning_rate`, which replaced it, so "not recognized" reads like "delete this". Deleting it is silent: SGD falls back to `learning_rate=0.01`, a tenth of the book's value, with no warning and no error. Trained on MNIST at seed 19 for the book's 20 epochs, keeping 0.1 gives val_acc **0.9752** and dropping the argument gives **0.9467**, a **0.0285** gap - and 10 epochs to reach what the book's rate reaches in 1. The architecture itself is untouched: 4,160 parameters in the second Dense layer, exactly as printed on p. 127, and the book's own figures still hold (92.34% to a measured 92.78% at epoch 1, ~97.6% to 97.52% at epoch 20). The book was right. Its code just stopped running. [VS Code run](screenshots/keras_lr_silent_default.png) |
 | — | kmeans_ninit_default.py | The book never passes `n_init`, so its line inherits scikit-learn's default — and that default changed from `10` to `'auto'` in v1.4 (*50 Algorithms Every Programmer Should Know*, Imran Ahmad, Packt, ch. 6, `Unsupervised_Machine_Learning_Algorithms.ipynb` cell 5: `cluster.KMeans(n_clusters=2)`). Fitted rather than read from the docs, `'auto'` resolves to **1** under the default `init='k-means++'` and to **10** under `init='random'` — one default silently depending on another argument the book also never sets. k-means is only guaranteed a local optimum per restart, so on UCI handwritten digits (1797x64, k=10, ships with scikit-learn; directory source *Datascience public datasets.pdf* p.23) across 30 seeds the printed line lands worse on **28/30**, median gap **+0.40%**, worst seed **+4.58%**. Inertia spread widens from **637.2** to **53,470.4** — the same line is 84x less stable — and mean ARI against the true digit falls **0.6677 to 0.6378**, worst-seed ARI **0.6603 to 0.5628**. No error and no warning in either direction. The change bought real speed (**4.66s to 1.36s** for 30 fits, 3.4x), so the repair is not to revert it but to write the default down: `KMeans(n_clusters=10, n_init=10)`. [VS Code run](screenshots/kmeans_ninit_default.png) |
@@ -261,3 +262,47 @@ python day19_three_paradigms.py
 ```
 
 Measured on Python 3.13.5, scikit-learn 1.8.0, numpy 2.2.6, pandas 2.3.1, torch 2.9.1+cpu.
+
+## Day 20 - the run
+
+Source: *Machine Learning with Python Cookbook* - two recipes from the same book, chained.
+Chapter 3.0 (PDF p.37) downloads a dataset straight from a URL; Recipe 1.3 (PDF p.6) turns
+a matrix into CSR. Recipe 1.3 is sold with Netflix:
+
+> "imagine a matrix where the columns are every movie on Netflix, the rows are every Netflix
+> user, and the values are how many times a user has watched that particular movie ... the
+> vast majority of elements would be zero" - "leading to significant computational savings."
+
+The book states that saving, demonstrates it on a 3x2 array holding two non-zero values, and
+measures nothing. So this run measures it, on real data the book itself points at.
+
+| what | number | how |
+|---|---|---|
+| dataset | 1,313 rows x 6 cols | `pd.read_csv(url)`, the book's own p.37 method |
+| matrix | 1,313 passengers x 1,310 names | one-hot encode `Name` - people x items, the Netflix shape |
+| zeros | 1,718,717 of 1,720,030 = **99.92%** | measured |
+| dense | **13.12 MB** | measured, `ndarray.nbytes` |
+| CSR | **0.02 MB** | measured, `data + indices + indptr` |
+| saving | **99.85%**, 655x smaller | measured, lossless round trip |
+| crossover | CSR costs **more** than dense above **~67% density** | formula, then checked by allocating at 90%: predicted 1.35x, measured 1.35x |
+
+Two things the book's 3x2 toy cannot show:
+
+**CSR is not free.** It stores a value *and* a 4-byte column index for every non-zero, plus a
+row pointer per row. Below the crossover that is a bargain; above it the recipe is a
+pessimisation, and the book never mentions the crossover exists.
+
+**`csr_matrix` silently sums duplicate coordinates.** Three separate `(0, 5)` entries become
+one stored cell with value `3`. For a watch-count matrix that is exactly right. For a ratings
+matrix it turns every repeated rating into a total, with no error and no warning.
+
+Also worth noting: on scipy 1.16.3 the recipe's own printed output no longer matches the
+book. The two coordinate lines are unchanged, but a header line now precedes them.
+
+[VS Code run + full output](screenshots/day20_sparse_matrix_netflix.png)
+
+```bash
+python day20_sparse_matrix_netflix.py
+```
+
+Measured on Python 3.13.5, scipy 1.16.3, numpy 2.2.6, pandas 2.3.1.
