@@ -299,7 +299,7 @@ matrix it turns every repeated rating into a total, with no error and no warning
 Also worth noting: on scipy 1.16.3 the recipe's own printed output no longer matches the
 book. The two coordinate lines are unchanged, but a header line now precedes them.
 
-[VS Code run + full output](screenshots/day20_sparse_matrix_netflix.png)
+[VS Code run + full output](screenshots/day20_sparse_matrix_netflix.png) - the file open in the editor, and the same run in VS Code's integrated terminal via a task.
 
 ```bash
 python day20_sparse_matrix_netflix.py
