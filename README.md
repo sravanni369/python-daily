@@ -306,3 +306,54 @@ python day20_sparse_matrix_netflix.py
 ```
 
 Measured on Python 3.13.5, scipy 1.16.3, numpy 2.2.6, pandas 2.3.1.
+
+## Day 21 - the run
+
+Source: *Python for Data Analysis*, 3rd Edition (Wes McKinney, 2022), Chapter 13
+"Data Analysis Examples", the MovieLens 1M section. The full text is free at
+[wesmckinney.com/book](https://wesmckinney.com/book), and the data comes from the author's
+own repo, `wesm/pydata-book`.
+
+**The book's code still works.** Every published figure reproduces exactly on Python 3.13.5
+and pandas 2.3.1, four years and two major pandas versions after publication: 1,216 active
+titles, Close Shave 4.644444 F / 4.473795 M, Dirty Dancing gap -0.830782. Nothing raised and
+nothing warned. That is worth saying, because most entries in this series find breakage and
+this one does not.
+
+**The finding is what the analysis never checks.** Chapter 13 keeps titles with at least 250
+ratings, then ranks the male-minus-female mean gap and reads the ends of that ranking as a
+result about taste. The filter counts *total* ratings. The comparison is between two groups.
+In this dataset those come apart: 71.7% of raters and 75.4% of ratings are male, so a title
+can clear 250 on its male raters alone.
+
+```
+fewest female ratings on any "active" title : 13
+active titles with fewer than 50 women      : 82
+median female ratings per active title      : 128
+
+gaps distinguishable from zero at 95%: 423 of 1,216
+gaps that are NOT                    : 793  = 65.2% of the ranking
+```
+
+`Where Eagles Dare (1969)` clears the filter on 13 female ratings and carries a standard
+error of 0.334 on a gap of 0.449.
+
+Requiring 100 or more ratings from *each* gender keeps 798 of the 1,216 titles, and 10 of the
+book-style top 20 gaps disappear, including `The Good, The Bad and The Ugly` (n_F=99) and
+`For a Few Dollars More` (n_F=22).
+
+**The book's own examples survive.** Dirty Dancing, Grease and Jumpin' Jack Flash are all
+comfortably significant and clear the stricter bar, so its stated conclusions stand. The
+problem is that the same table read the same way yields several hundred differences that are
+sampling noise, and nothing in the method tells you which is which.
+
+The fix is one line: filter on the smaller group, not the total.
+
+Run it yourself:
+
+```bash
+python day21_movielens_gender_gap.py
+```
+
+The script downloads MovieLens 1M on first run and caches it locally.
+Measured on Python 3.13.5, pandas 2.3.1, numpy 2.2.6.
