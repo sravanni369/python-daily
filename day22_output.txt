@@ -1,0 +1,50 @@
+========================================================================
+1. EXAMPLE 1-1 EXACTLY AS PRINTED IN THE BOOK
+========================================================================
+oecd_bli (3292, 17)   gdp_per_capita (190, 7)   both load fine
+-> NameError: name 'prepare_country_stats' is not defined
+The listing calls this function and never defines it. The example as
+printed does not run. The definition is only in the companion notebook.
+
+========================================================================
+2. WHAT THE MISSING FUNCTION QUIETLY DOES
+========================================================================
+countries after the merge : 36
+countries the book keeps  : 29
+silently dropped          : 7
+
+                GDP per capita  Life satisfaction
+Country                                          
+Brazil                  8670.0                7.0
+Mexico                  9009.3                6.7
+Chile                  13340.9                6.7
+Czech Republic         17256.9                6.5
+Norway                 74822.1                7.4
+Switzerland            80675.3                7.5
+Luxembourg            101994.1                6.9
+
+Those are the 4 poorest and the 3 richest countries in the data.
+Cutting both tails is the most effective way to straighten a line.
+
+========================================================================
+3. THE SAME MODEL, THE SAME CODE, DIFFERENT ROWS
+========================================================================
+                         n        slope  intercept       R2       Cyprus
+book (7 dropped)        29    4.912e-05     4.8531   0.7344   5.96242338
+all 36 countries        36    2.318e-05     5.7630   0.4041   6.28653637
+
+The book prints [[ 5.96242338 ]]. Reproduced exactly: 5.96242338
+On the full data the same code predicts        : 6.28653637
+R2 falls from 0.7344 to 0.4041. The slope drops 53%.
+
+========================================================================
+4. THE FAIR READING
+========================================================================
+Geron removes these rows on purpose. His notebook stores them as
+`missing_data` so he can plot them, and Chapter 1 comes back to them as the
+worked example of sampling bias. The filtering is a teaching setup.
+
+What it costs is this: Example 1-1 is the first runnable code in the book and
+the piece most people copy. On its own it shows a relationship about twice as
+strong as the full data supports, and the printed listing gives no sign that
+seven countries were removed to get there.

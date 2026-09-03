@@ -357,3 +357,113 @@ python day21_movielens_gender_gap.py
 
 The script downloads MovieLens 1M on first run and caches it locally.
 Measured on Python 3.13.5, pandas 2.3.1, numpy 2.2.6.
+
+## Day 22 - the run
+
+Source: *Hands-On Machine Learning with Scikit-Learn and TensorFlow* (Aurelien Geron),
+Chapter 1, **Example 1-1**. Data and notebook: `github.com/ageron/handson-ml`.
+
+**The example as printed does not run.** The listing calls `prepare_country_stats()` and
+never defines it. Copy it out of the book exactly and you get
+`NameError: name 'prepare_country_stats' is not defined`. The definition lives only in the
+companion notebook.
+
+**What that missing function does.** It drops 7 of the 36 merged countries before fitting:
+
+```
+Brazil          8670.0   7.0
+Mexico          9009.3   6.7
+Chile          13340.9   6.7
+Czech Republic 17256.9   6.5
+Norway         74822.1   7.4
+Switzerland    80675.3   7.5
+Luxembourg    101994.1   6.9
+```
+
+Those are the four poorest and the three richest countries in the data. Cutting both tails
+is the most effective way to straighten a line.
+
+**Same code, different rows:**
+
+```
+                   n        slope  intercept       R2       Cyprus
+book (7 dropped)  29    4.912e-05     4.8531   0.7344   5.96242338
+all 36 countries  36    2.318e-05     5.7630   0.4041   6.28653637
+```
+
+The book prints `[[ 5.96242338 ]]`. Reproduced exactly. On the full data the same code
+predicts `6.28653637`, R2 falls from 0.7344 to 0.4041, and the slope drops 53%.
+
+**Geron is not hiding this.** His notebook keeps the removed rows in a variable called
+`missing_data` so he can plot them, and Chapter 1 returns to them as the worked example of
+sampling bias. The filtering is a teaching setup, not an error.
+
+The cost is that Example 1-1 is the first runnable code in the book and the piece most
+people copy. On its own it shows a relationship about twice as strong as the full data
+supports, and the printed listing gives no sign that seven countries were removed.
+
+Run it yourself:
+
+```bash
+python day22_geron_example_1_1.py
+```
+
+Downloads Geron's two CSVs on first run and caches them.
+Measured on Python 3.13.5, scikit-learn 1.8.0, pandas 2.3.1.
+
+## Marietta housing - an end-to-end project, and the leak inside it
+
+Chapter 2 of *Hands-On Machine Learning* (Geron) runs an end-to-end project on 1990
+California census data. I rebuilt the same pipeline on **current Zillow Research data for
+Georgia**, 664 ZIP codes, with Marietta as the place of interest. Same stages: stratified
+split, imputation, scaling, one-hot encoding, RandomForest, `GridSearchCV`, test
+evaluation with a 95% interval.
+
+**It scored reasonably.** Test RMSE `$63,073` against a median home value of `$258,079`,
+so 24.4% error.
+
+**Then the feature importances.**
+
+```
+0.6865  zhvi_3bed
+0.1806  sale_price
+0.0660  price_to_rent
+0.0161  price_cut_pct
+```
+
+`zhvi_3bed` is the Zillow Home Value Index for three-bedroom homes. The target is the
+Zillow Home Value Index for all homes. Same measurement, subset of the same houses, same
+publisher, same month. One column was carrying 69% of the model and it was the answer in
+disguise.
+
+**Refit without it** (and without `zhvi_1bed` and the `bed_premium` ratio built from both):
+
+```
+                              test RMSE   % of median
+with ZHVI-derived features       63,073         24.4%
+with them removed                89,329         34.6%
+```
+
+Error grows **42%**. Honest 95% bound: `$57,345` to `$112,565`. The honest model leans on
+`inventory` (0.398), `price_cut_pct` (0.158) and `price_to_rent` (0.110) instead, which
+are genuinely different measurements from the target.
+
+The second model is worse in every direction and is the only one worth reporting.
+
+**Honest limits.** 664 ZIP codes against Geron's 20,640 block groups, so cross-validation
+spread is wide. These are market features rather than demographics. The seven Marietta
+ZIPs come out at a $9,906 mean absolute error, but those ZIPs were in training, so that
+is a sanity check and not a generalisation estimate.
+
+`marietta_census_variant.py` is the same project against Census ACS block groups, which
+is a closer analogue to Geron's data. It needs a free Census API key; the API stopped
+accepting keyless requests.
+
+Run it:
+
+```bash
+python marietta_housing/marietta_zillow.py
+```
+
+Downloads nine Zillow Research CSVs on first run and caches them. No API key.
+Measured on Python 3.13.5, scikit-learn 1.8.0, pandas 2.3.1.

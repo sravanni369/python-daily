@@ -1,0 +1,170 @@
+==========================================================================
+1. GET THE DATA  (Zillow Research, no API key)
+==========================================================================
+
+most recent month used per file:
+  zhvi           2026-07-31
+  zori           2026-07-31
+  sale_price     2026-06-30
+  inventory      2026-07-31
+  days_pending   2026-07-31
+  price_cut_pct  2026-07-31
+  new_listings   2026-07-31
+  zhvi_1bed      2026-07-31
+  zhvi_3bed      2026-07-31
+
+Georgia ZIP codes with a home value: 664
+(Geron's California extract has 20,640 block groups - far smaller sample here)
+
+            zhvi    zori  sale_price  inventory  days_pending  price_cut_pct  new_listings  zhvi_1bed  zhvi_3bed
+count      664.0   255.0       208.0      555.0         177.0          414.0         393.0       64.0      530.0
+mean    291539.1  1771.1    386222.3      104.6          66.9            0.3          32.5   202180.8   308527.3
+std     222949.2   368.4    180668.6      108.9          17.1            0.1          25.2    79363.2   186801.5
+min      70084.2   756.9     69833.0        3.0          28.0            0.0           5.0    39994.3    80713.1
+25%     175245.0  1538.1    266829.0       19.0          55.0            0.2          10.0   156177.7   223573.1
+50%     258949.8  1784.0    347917.0       59.0          64.0            0.3          26.0   193617.7   280398.8
+75%     351098.6  2010.5    443333.5      168.0          76.0            0.3          47.0   261280.6   348537.3
+max    4539538.9  2972.5   1641167.0      498.0         123.0            0.4         122.0   413571.6  3345718.2
+
+missing values per column:
+zhvi               0
+zori             409
+sale_price       456
+inventory        109
+days_pending     487
+price_cut_pct    250
+new_listings     271
+zhvi_1bed        600
+zhvi_3bed        134
+
+Marietta ZIPs present: [30008, 30060, 30062, 30064, 30066, 30067, 30068]
+ RegionName     City          zhvi
+      30062 Marietta 561811.939450
+      30066 Marietta 447594.877961
+      30064 Marietta 500477.037165
+      30067 Marietta 411354.934348
+      30060 Marietta 348129.267148
+      30008 Marietta 331745.184977
+      30068 Marietta 686111.584089
+
+==========================================================================
+2. CREATE A TEST SET  (stratified on value band, as Geron stratifies on income)
+==========================================================================
+           overall  test set
+value_cat                   
+1           0.1491    0.1504
+2           0.3268    0.3308
+3           0.3614    0.3609
+4           0.1386    0.1353
+5           0.0241    0.0226
+
+train 531   test 133
+
+==========================================================================
+3. LOOK FOR CORRELATIONS
+==========================================================================
+zhvi                     1.0000
+sale_price               0.9920
+zhvi_3bed                0.9497
+price_to_rent            0.9276
+zori                     0.5272
+bed_premium              0.5008
+zhvi_1bed                0.3887
+new_listings             0.3271
+price_cut_pct            0.2521
+inventory                0.2320
+inventory_per_listing    0.0291
+days_pending            -0.1538
+RegionName              -0.1947
+
+==========================================================================
+4. PREPARE THE DATA
+==========================================================================
+features used (11 numeric + metro flag):
+  zori, sale_price, inventory, days_pending, price_cut_pct, new_listings, zhvi_1bed, zhvi_3bed, price_to_rent, inventory_per_listing, bed_premium
+prepared matrix: (531, 13)
+
+==========================================================================
+5. SELECT AND TRAIN MODELS  (10-fold cross-validation)
+==========================================================================
+LinearRegression   train $    74,647   CV $   102,507 +/- $   71,256
+DecisionTree       train $    18,440   CV $   107,146 +/- $  144,167
+RandomForest       train $    67,115   CV $   100,569 +/- $  147,748
+
+A train error far below the CV error is overfitting, which is exactly what
+Geron demonstrates when his Decision Tree scores 0.0 on the training set.
+
+==========================================================================
+6. FINE-TUNE  (GridSearchCV)
+==========================================================================
+best params: {'max_features': 8, 'n_estimators': 30}
+best CV RMSE: $178,288
+
+feature importances:
+  0.6865  zhvi_3bed
+  0.1806  sale_price
+  0.0660  price_to_rent
+  0.0161  price_cut_pct
+  0.0125  inventory
+  0.0084  bed_premium
+  0.0074  REST OF GEORGIA
+  0.0064  inventory_per_listing
+  0.0046  ATLANTA METRO
+  0.0040  zori
+  0.0037  new_listings
+  0.0028  days_pending
+  0.0011  zhvi_1bed
+
+==========================================================================
+7. EVALUATE ON THE TEST SET
+==========================================================================
+final test RMSE      : $63,073
+95% confidence bound : $20,478 to $86,817
+median test home value: $258,079
+error as share of median: 24.4%
+
+Quote the interval, not the point estimate. On a sample this small the
+interval is wide and the single number would overstate what we know.
+
+==========================================================================
+8. LEAKAGE CHECK - THE PART THAT DECIDES WHETHER ANY OF THIS IS REAL
+==========================================================================
+zhvi_3bed and zhvi_1bed are Zillow Home Value Indices for 3-bed and 1-bed
+homes. The target is the Zillow Home Value Index for all homes. Those are
+the same measurement on a subset of the same houses, so a model leaning on
+them is not predicting a price, it is copying one. bed_premium is built from
+both, so it goes too. Refit with all three removed.
+
+                                 test RMSE   % of median
+with ZHVI-derived features          63,073         24.4%
+with them removed                   89,329         34.6%
+
+error grows 42% once the leak is closed
+honest 95% bound: $57,345 to $112,565
+
+honest feature importances:
+  0.3979  inventory
+  0.1577  price_cut_pct
+  0.1100  price_to_rent
+  0.1091  sale_price
+  0.0542  zori
+  0.0487  new_listings
+
+This second number is the one worth reporting. The first was mostly the
+model reading the answer off a feature.
+
+==========================================================================
+9. MARIETTA
+==========================================================================
+  ZIP   actual  predicted    error
+30062 561812.0   553891.0  -7921.0
+30066 447595.0   449584.0   1989.0
+30064 500477.0   484086.0 -16391.0
+30067 411355.0   406466.0  -4889.0
+30060 348129.0   359981.0  11852.0
+30008 331745.0   349479.0  17734.0
+30068 686112.0   677545.0  -8567.0
+
+Marietta mean absolute error: $9,906
+Some of these ZIPs were in training, so this is not a clean holdout.
+It is a sanity check on the home market, not a generalisation estimate.
