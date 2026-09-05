@@ -1,7 +1,7 @@
 """Why Momentum Really Works (Gabriel Goh, Distill, 4 Apr 2017) - verified, then applied.
 
 Part 1 holds the article's closed-form convergence rates against a real run. Part 2 uses
-them to test my own explanation of yesterday's MNIST result, and finds it wrong.
+them to test my own explanation of the MNIST result in this repo, and finds it wrong.
 
 The article derives, for a convex quadratic with eigenvalues in [l1, ln], k = ln/l1:
   gradient descent, a = 2/(l1+ln)                       rate (k-1)/(k+1)
@@ -10,19 +10,19 @@ The article derives, for a convex quadratic with eigenvalues in [l1, ln], k = ln
 
 In `mnist_five_detector.py` an SGD 5-detector scored 0.9492 on raw 0-255 pixels and 0.9772
 on X/255. Describing that result I offered conditioning as the likely mechanism - in
-conversation, not in the repo. It is wrong: dividing by 255 scales every
-eigenvalue of the covariance by exactly 1/255^2, so k is invariant, and it is measured
-invariant to 9 significant figures below. The real cause is scikit-learn's default
-learning_rate='optimal' schedule, which assumes modestly-scaled features.
+conversation, not in the repo. It is aimed at the wrong quantity: dividing by 255 scales every
+eigenvalue of the covariance by exactly 1/255^2, so k - a RATIO - cannot move, and [3] measures
+it unmoved to the ~7 s.f. eigvalsh resolves. What does move is lam_max, by 255^2. The cause is
+scikit-learn's learning_rate='optimal', which derives its step from alpha alone with no
+reference to feature scale, so it is eta*lam_max that goes wrong.
 
 Verified 2026-09-05 on python 3.13.5, scikit-learn 1.8.0, numpy 2.2.6, pandas 2.3.1.
 """
 import numpy as np
 from sklearn.datasets import fetch_openml
-from sklearn.linear_model import SGDClassifier; from sklearn.metrics import accuracy_score
+from sklearn.linear_model import SGDClassifier; from sklearn.metrics import accuracy_score, recall_score
 
-def rate(lams, alpha, beta, iters=3000, burn=300):
-    """Measured contraction rate. (w, z) is linear, so renormalising each step is exact."""
+def rate(lams, alpha, beta, iters=3000, burn=300):   # (w,z) is linear, so renormalising each step is exact
     w, z, acc = np.ones_like(lams), np.zeros_like(lams), 0.0
     for k in range(iters):
         z = beta * z + lams * w; w = w - alpha * z
@@ -35,8 +35,7 @@ print('[1] the article\'s rates, measured on quadratics with known eigenvalues')
 for k in (10, 100, 1000, 10000):
     lams = np.linspace(1.0, float(k), 50); r = np.sqrt(k)
     a_m = (2 / (1 + r)) ** 2; b_m = ((r - 1) / (r + 1)) ** 2
-    p_g, p_m = (k - 1) / (k + 1), (r - 1) / (r + 1)
-    m_g, m_m = rate(lams, 2 / (1 + k), 0.0), rate(lams, a_m, b_m)
+    p_g, p_m = (k - 1) / (k + 1), (r - 1) / (r + 1); m_g, m_m = rate(lams, 2 / (1 + k), 0.0), rate(lams, a_m, b_m)
     print(f'    k={k:<6} GD pred {p_g:.6f} meas {m_g:.6f} dev {abs(p_g-m_g):.1e} | '
           f'momentum pred {p_m:.6f} meas {m_m:.6f} dev {m_m-p_m:.1e}')
 
@@ -49,25 +48,27 @@ for it, bu in ((3000, 300), (10000, 1000), (30000, 3000)):
 
 print('[3] MNIST: does scaling change the condition number? (my hypothesis said yes)')
 Xdf, ys = fetch_openml('mnist_784', version=1, return_X_y=True)
-X = Xdf.to_numpy(dtype=np.float32); y5 = (ys.to_numpy().astype(np.uint8) == 5)
-ks = []
-for name, A in (('raw 0-255', X[:60000].astype(np.float64)), ('X/255', X[:60000].astype(np.float64) / 255)):
+X = Xdf.to_numpy(dtype=np.uint8).astype(np.float64)   # mnist_five_detector.py's dtype; float32 moves seed 42 to 0.9679
+y5 = (ys.to_numpy().astype(np.uint8) == 5); ks = []
+for name, A in (('raw 0-255', X[:60000]), ('X/255', X[:60000] / 255)):
     ev = np.clip(np.linalg.eigvalsh(np.cov(A, rowvar=False)), 0, None)
     nz = ev[ev > ev[-1] * len(ev) * np.finfo(float).eps]   # relative tol, else the test is scale-dependent
     ks.append(nz[-1] / nz[0])
     print(f'    {name:<10} lam_max={ev[-1]:.4e}  rank={len(nz)}  kappa={nz[-1]/nz[0]:.8e}')
-print(f'    kappa ratio {ks[0]/ks[1]:.9f} -- identical to 9 s.f. Scaling cannot be the mechanism.')
-
-print('[4] the real cause: the default learning-rate schedule, not the geometry')
+print(f'    kappa ratio {ks[0]/ks[1]:.9f} -- equal to the ~7 s.f. eigvalsh resolves at kappa=6e9;\n'
+      '    this is cov(cX)=c^2 cov(X) confirmed numerically, an identity the test could not fail.')
 tr, te = slice(0, 60000), slice(60000, 70000)
+print(f'[4] the real cause: the schedule. never-5 baseline acc={1 - y5[te].mean():.4f} rec5=0.0000, 10 seeds each')
 for lbl, A, kw in (('raw,   optimal (default)', X, {}), ('X/255, optimal (default)', X / 255, {}),
                    ('raw,   constant eta0=1e-6', X, dict(learning_rate='constant', eta0=1e-6)),
-                   ('X/255, constant eta0=6.5e-2', X / 255, dict(learning_rate='constant', eta0=1e-6 * 255**2))):
-    fits = [SGDClassifier(random_state=s, **kw).fit(A[tr], y5[tr]) for s in (0, 1, 42)]
-    a = np.mean([accuracy_score(y5[te], f.predict(A[te])) for f in fits])
-    print(f'    {lbl:<28} acc={a:.4f}  epochs={[int(np.ravel(f.n_iter_)[0]) for f in fits]}')
+                   ('X/255, constant, eta0 & alpha matched', X / 255,
+                    dict(learning_rate='constant', eta0=1e-6 * 255**2, alpha=1e-4 / 255**2))):
+    P = [SGDClassifier(random_state=s, **kw).fit(A[tr], y5[tr]).predict(A[te]) for s in range(10)]
+    a = np.array([accuracy_score(y5[te], q) for q in P]); r = np.array([recall_score(y5[te], q) for q in P])
+    print(f'    {lbl:<38} acc {a.mean():.4f}+-{a.std(ddof=1):.4f} [{a.min():.4f},{a.max():.4f}]  '
+          f'rec5 {r.mean():.4f} [{r.min():.4f},{r.max():.4f}]')
 
-print("[5] Matched constant step sizes erase the gap, so the geometry was never the problem. The\n"
-      "    default 'optimal' schedule sets its step from alpha and an assumed feature scale; at\n"
-      "    0-255 it is mismatched, needs ~7x the epochs, and still stops worse. I had offered the\n"
-      "    conditioning guess as 'likely'. It was wrong, and [3] is the measurement that says so.")
+print("[5] Matched constant steps erase the gap, so the ANISOTROPY was never the problem - the SCALE\n"
+      "    was. kappa does not move, but lam_max falls by 255^2, and that is exactly the 255^2 in the\n"
+      "    matched eta0 above: it is eta*lam_max the schedule gets wrong. kappa can rule out anisotropy,\n"
+      "    not scale - so my guess was not merely unproven, it was aimed at the wrong quantity.")

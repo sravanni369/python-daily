@@ -10,13 +10,14 @@
 [3] MNIST: does scaling change the condition number? (my hypothesis said yes)
     raw 0-255  lam_max=3.3272e+05  rank=712  kappa=6.34044150e+09
     X/255      lam_max=5.1169e+00  rank=712  kappa=6.34044144e+09
-    kappa ratio 1.000000009 -- identical to 9 s.f. Scaling cannot be the mechanism.
-[4] the real cause: the default learning-rate schedule, not the geometry
-    raw,   optimal (default)     acc=0.9605  epochs=[208, 159, 230]
-    X/255, optimal (default)     acc=0.9723  epochs=[29, 25, 31]
-    raw,   constant eta0=1e-6    acc=0.9679  epochs=[18, 18, 11]
-    X/255, constant eta0=6.5e-2  acc=0.9649  epochs=[10, 14, 8]
-[5] Matched constant step sizes erase the gap, so the geometry was never the problem. The
-    default 'optimal' schedule sets its step from alpha and an assumed feature scale; at
-    0-255 it is mismatched, needs ~7x the epochs, and still stops worse. I had offered the
-    conditioning guess as 'likely'. It was wrong, and [3] is the measurement that says so.
+    kappa ratio 1.000000009 -- equal to the ~7 s.f. eigvalsh resolves at kappa=6e9;
+    this is cov(cX)=c^2 cov(X) confirmed numerically, an identity the test could not fail.
+[4] the real cause: the schedule. never-5 baseline acc=0.9108 rec5=0.0000, 10 seeds each
+    raw,   optimal (default)               acc 0.9550+-0.0332 [0.8612,0.9720]  rec5 0.7272 [0.5650,0.9361]
+    X/255, optimal (default)               acc 0.9757+-0.0029 [0.9686,0.9783]  rec5 0.8034 [0.6749,0.8733]
+    raw,   constant eta0=1e-6              acc 0.9690+-0.0062 [0.9534,0.9762]  rec5 0.7948 [0.7040,0.9058]
+    X/255, constant, eta0 & alpha matched  acc 0.9644+-0.0119 [0.9331,0.9742]  rec5 0.7890 [0.6121,0.9170]
+[5] Matched constant steps erase the gap, so the ANISOTROPY was never the problem - the SCALE
+    was. kappa does not move, but lam_max falls by 255^2, and that is exactly the 255^2 in the
+    matched eta0 above: it is eta*lam_max the schedule gets wrong. kappa can rule out anisotropy,
+    not scale - so my guess was not merely unproven, it was aimed at the wrong quantity.
