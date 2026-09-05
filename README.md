@@ -36,7 +36,7 @@ One focused Python exercise per day. Each file is self-contained and runnable: `
 
 | MNIST | mnist_five_detector.py | Chapter 3 of *Hands-On Machine Learning* (Aurelien Geron, O'Reilly, 1st ed, **p.113**) opens by fetching MNIST and building a "5-detector", to teach that accuracy is the wrong metric when one class is rare. Three things break before you reach the lesson. `from sklearn.datasets import fetch_mldata` raises **ImportError** - removed in scikit-learn 0.22 after mldata.org went offline. The replacement, `fetch_openml`, returns a **DataFrame** by default, so the book's `some_digit = X[36000]` is read as a column name and raises **KeyError: 36000**. And `fetch_openml` returns labels as **strings**, so the book's `y_train == 5` compares str to int and yields **0 positives out of 60,000** with no error and no warning - the failure only appears later inside `fit()`, as *"The number of classes has to be greater than one"*, which blames the model rather than the label line three lines above. After `astype(np.uint8)` there are 5,421 fives in train and 892 in test, and the chapter's lesson lands: a never-5 classifier scores **0.9108**, an SGD 5-detector on unscaled pixels scores **0.9492** at seed 42 - but across seeds 0-9 that same model ranges **0.8612-0.9720**, and the worst seed loses to the do-nothing baseline. Recall separates them every time; accuracy does not. [VS Code run](screenshots/mnist_five_detector_run.png) |
 
-| Momentum | momentum_and_scaling.py | *Why Momentum Really Works* (Gabriel Goh, Distill, 4 Apr 2017) derives closed-form convergence rates for a convex quadratic with condition number k: **(k-1)/(k+1)** for gradient descent, **(sqrt(k)-1)/(sqrt(k)+1)** for momentum at its optimal alpha and beta. Measured against real runs on quadratics with known eigenvalues, GD matches to **9.3e-15** across k = 10 to 10,000. Momentum sits ~8e-4 above prediction - not an error in the formula but a finite-window artefact: at critical damping the 2x2 block is defective, so error decays like **k*rho^k** and any finite measurement window overestimates rho. Predicted artefact and measured deviation agree to 3 s.f. at every window (6.98e-04, 2.09e-04, 6.98e-05 as the window grows 2,700 -> 27,000). The second half turns the same tool on my own claim: I had suggested that `X/255` helps the MNIST 5-detector because it improves conditioning. **It does not.** Uniform scaling divides every eigenvalue of the covariance by exactly 255^2, so k is invariant - measured **6.34044150e+09** raw against **6.34044144e+09** scaled, identical to 9 significant figures at the same rank 712. The real cause is scikit-learn's default `learning_rate='optimal'`, whose step derives from `alpha` alone with no reference to feature scale. Over 10 seeds it scores **0.9550 +/- 0.0332** on raw pixels against **0.9757 +/- 0.0029** scaled - not just lower but **11x less stable** - and matched constant steps erase the gap (0.9690 +/- 0.0062 vs 0.9644 +/- 0.0119). [VS Code run](screenshots/momentum_and_scaling_run.png) |
+| Momentum | momentum_and_scaling.py | *Why Momentum Really Works* (Gabriel Goh, Distill, 4 Apr 2017) derives closed-form convergence rates for a convex quadratic with condition number k: **(k-1)/(k+1)** for gradient descent, **(sqrt(k)-1)/(sqrt(k)+1)** for momentum at its optimal alpha and beta. Measured against real runs on quadratics with known eigenvalues, GD matches to **9.3e-15** across k = 10 to 10,000. Momentum sits ~8e-4 above prediction - not an error in the formula but a finite-window artefact: at critical damping the 2x2 block is defective, so error decays like **k*rho^k** and any finite measurement window overestimates rho. Predicted artefact and measured deviation agree to 3 s.f. at every window (6.98e-04, 2.09e-04, 6.98e-05 as the window grows 2,700 -> 27,000). The second half turns the same tool on my own claim: I had suggested that `X/255` helps the MNIST 5-detector because it improves conditioning. **It does not.** Uniform scaling divides every eigenvalue of the covariance by exactly 255^2, so k is invariant - measured **6.34044150e+09** raw against **6.34044144e+09** scaled at the same rank 712, equal to the ~7 s.f. `eigvalsh` resolves at that magnitude. The real cause is scikit-learn's default `learning_rate='optimal'`, whose step derives from `alpha` alone with no reference to feature scale. Over 10 seeds it scores **0.9550 +/- 0.0332** on raw pixels against **0.9757 +/- 0.0029** scaled - not just lower but **11x less stable** - and matched constant steps erase the gap (0.9690 +/- 0.0062 vs 0.9644 +/- 0.0119). [VS Code run](screenshots/momentum_and_scaling_run.png) |
 
 ## Day 19 - the run
 
@@ -468,10 +468,18 @@ equally and the ratio between them cannot move.
 ```
 raw 0-255  lam_max=3.3272e+05  rank=712  kappa=6.34044150e+09
 X/255      lam_max=5.1169e+00  rank=712  kappa=6.34044144e+09
-kappa ratio 1.000000009 -- identical to 9 s.f.
+kappa ratio 1.000000009 -- equal to the ~7 s.f. eigvalsh resolves at kappa=6e9;
+this is cov(cX)=c^2 cov(X) confirmed numerically, an identity the test could not fail.
 ```
 
-Same rank, and a lam_max ratio of exactly 255^2. The 9e-9 discrepancy is floating point.
+Same rank, and a lam_max ratio of exactly 255^2 (65025.00000000007 measured).
+
+Two honest qualifications. The kappa values are printed to 9 digits but `eigvalsh` only
+resolves about 7 at this magnitude - float64 rounding alone moves kappa across
+`6.34044046e+09 .. 6.34044252e+09`, so the agreement is real but the last two digits of each
+are not. And `cov(cX) = c^2 cov(X)` is an identity, so this comparison *could not* have come
+out unequal: it confirms the algebra numerically rather than discovering anything. The
+discovery is what happens next.
 
 *A note on how I nearly got this wrong twice.* My first measurement filtered eigenvalues with
 an absolute threshold (`ev > 1e-9`) and reported kappa 6.34e9 against 4.11e8 - a 15x
@@ -502,6 +510,12 @@ rule out scale, so my guess was not merely unproven, it was aimed at the wrong q
 *Recall is printed beside accuracy because this is a 5-detector and the 5s are 9% of the test
 set. One raw-pixel seed misses nearly half of them (rec5 0.5650) while still printing 0.8612
 accuracy.*
+
+![Dividing by 255 does not fix conditioning](screenshots/dividing_by_255.png)
+
+Written up for a general audience in [posts/dividing_by_255_post.md](posts/dividing_by_255_post.md),
+which also records the check that the 255^2 exponent is right: these are covariance
+eigenvalues, so they scale with the square of the data.
 
 Run it:
 
