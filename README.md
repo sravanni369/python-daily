@@ -522,6 +522,8 @@ an unrelated car-price project, and never connects it back to this listing.
 Negative result, published as-is: fixing all three defects buys no accuracy. What it buys
 is a feature that means the same thing on both sides of `fit`.
 
+![The guard that guarded nothing](screenshots/guard_that_guarded_nothing.png)
+
 Run it yourself:
 
 ```bash
