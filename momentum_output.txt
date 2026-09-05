@@ -1,0 +1,22 @@
+[1] the article's rates, measured on quadratics with known eigenvalues
+    k=10     GD pred 0.818182 meas 0.818182 dev 9.3e-15 | momentum pred 0.519494 meas 0.519937 dev 4.4e-04
+    k=100    GD pred 0.980198 meas 0.980198 dev 5.6e-16 | momentum pred 0.818182 meas 0.818879 dev 7.0e-04
+    k=1000   GD pred 0.998002 meas 0.998002 dev 0.0e+00 | momentum pred 0.938693 meas 0.939493 dev 8.0e-04
+    k=10000  GD pred 0.999800 meas 0.999800 dev 2.2e-16 | momentum pred 0.980198 meas 0.981034 dev 8.4e-04
+[2] the momentum residual is a finite-window artefact, not an error in the formula
+    window   2700  dev 6.98e-04  predicted by the k*rho^k defective block 6.98e-04
+    window   9000  dev 2.09e-04  predicted by the k*rho^k defective block 2.09e-04
+    window  27000  dev 6.98e-05  predicted by the k*rho^k defective block 6.98e-05
+[3] MNIST: does scaling change the condition number? (my hypothesis said yes)
+    raw 0-255  lam_max=3.3272e+05  rank=712  kappa=6.34044150e+09
+    X/255      lam_max=5.1169e+00  rank=712  kappa=6.34044144e+09
+    kappa ratio 1.000000009 -- identical to 9 s.f. Scaling cannot be the mechanism.
+[4] the real cause: the default learning-rate schedule, not the geometry
+    raw,   optimal (default)     acc=0.9605  epochs=[208, 159, 230]
+    X/255, optimal (default)     acc=0.9723  epochs=[29, 25, 31]
+    raw,   constant eta0=1e-6    acc=0.9679  epochs=[18, 18, 11]
+    X/255, constant eta0=6.5e-2  acc=0.9649  epochs=[10, 14, 8]
+[5] Matched constant step sizes erase the gap, so the geometry was never the problem. The
+    default 'optimal' schedule sets its step from alpha and an assumed feature scale; at
+    0-255 it is mismatched, needs ~7x the epochs, and still stops worse. I had offered the
+    conditioning guess as 'likely'. It was wrong, and [3] is the measurement that says so.

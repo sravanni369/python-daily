@@ -36,6 +36,8 @@ One focused Python exercise per day. Each file is self-contained and runnable: `
 
 | MNIST | mnist_five_detector.py | Chapter 3 of *Hands-On Machine Learning* (Aurelien Geron, O'Reilly, 1st ed, **p.113**) opens by fetching MNIST and building a "5-detector", to teach that accuracy is the wrong metric when one class is rare. Three things break before you reach the lesson. `from sklearn.datasets import fetch_mldata` raises **ImportError** - removed in scikit-learn 0.22 after mldata.org went offline. The replacement, `fetch_openml`, returns a **DataFrame** by default, so the book's `some_digit = X[36000]` is read as a column name and raises **KeyError: 36000**. And `fetch_openml` returns labels as **strings**, so the book's `y_train == 5` compares str to int and yields **0 positives out of 60,000** with no error and no warning - the failure only appears later inside `fit()`, as *"The number of classes has to be greater than one"*, which blames the model rather than the label line three lines above. After `astype(np.uint8)` there are 5,421 fives in train and 892 in test, and the chapter's lesson lands: a never-5 classifier scores **0.9108**, an SGD 5-detector on unscaled pixels scores **0.9492** at seed 42 - but across seeds 0-9 that same model ranges **0.8612-0.9720**, and the worst seed loses to the do-nothing baseline. Recall separates them every time; accuracy does not. [VS Code run](screenshots/mnist_five_detector_run.png) |
 
+| Momentum | momentum_and_scaling.py | *Why Momentum Really Works* (Gabriel Goh, Distill, 4 Apr 2017) derives closed-form convergence rates for a convex quadratic with condition number k: **(k-1)/(k+1)** for gradient descent, **(sqrt(k)-1)/(sqrt(k)+1)** for momentum at its optimal alpha and beta. Measured against real runs on quadratics with known eigenvalues, GD matches to **9.3e-15** across k = 10 to 10,000. Momentum sits ~8e-4 above prediction - not an error in the formula but a finite-window artefact: at critical damping the 2x2 block is defective, so error decays like **k*rho^k** and any finite measurement window overestimates rho. Predicted artefact and measured deviation agree to 3 s.f. at every window (6.98e-04, 2.09e-04, 6.98e-05 as the window grows 2,700 -> 27,000). The second half turns the same tool on my own claim: I had suggested that `X/255` helps the MNIST 5-detector because it improves conditioning. **It does not.** Uniform scaling divides every eigenvalue of the covariance by exactly 255^2, so k is invariant - measured **6.34044150e+09** raw against **6.34044144e+09** scaled, identical to 9 significant figures at the same rank 712. The real cause is scikit-learn's default `learning_rate='optimal'`, whose step is derived from `alpha` and an assumed feature scale: at 0-255 it burns **159-230 epochs** against 25-31 and still lands lower, and matched constant step sizes erase the gap entirely (0.9679 vs 0.9649). [VS Code run](screenshots/momentum_and_scaling_run.png) |
+
 ## Day 19 - the run
 
 Source: *Machine Learning: The 3 Core Paradigms*, Zarnappa Earnoor - a field guide that
@@ -414,6 +416,91 @@ python day22_geron_example_1_1.py
 
 Downloads Geron's two CSVs on first run and caches them.
 Measured on Python 3.13.5, scikit-learn 1.8.0, pandas 2.3.1.
+
+## Momentum, verified - and a hypothesis of mine that did not survive it
+
+Source: *Why Momentum Really Works*, Gabriel Goh, [Distill](https://distill.pub/2017/momentum/),
+4 April 2017.
+
+The article derives, for a convex quadratic with eigenvalues in `[l1, ln]` and condition
+number `k = ln/l1`:
+
+```
+gradient descent, a = 2/(l1+ln)                          rate (k-1)/(k+1)
+momentum, a = (2/(sqrt(l1)+sqrt(ln)))^2,
+          b = ((sqrt(ln)-sqrt(l1))/(sqrt(ln)+sqrt(l1)))^2  rate (sqrt(k)-1)/(sqrt(k)+1)
+```
+
+O(k) iterations becomes O(sqrt(k)). These are closed forms, so they can be held against a
+real run rather than admired.
+
+**Gradient descent matches to floating-point.**
+
+```
+k=10     GD pred 0.818182 meas 0.818182 dev 9.3e-15
+k=100    GD pred 0.980198 meas 0.980198 dev 5.6e-16
+k=1000   GD pred 0.998002 meas 0.998002 dev 0.0e+00
+k=10000  GD pred 0.999800 meas 0.999800 dev 2.2e-16
+```
+
+**Momentum sits about 8e-4 above prediction, and that is not the formula's fault.** At the
+article's optimal beta each eigendirection is critically damped, which makes the 2x2 iteration
+matrix *defective* - a repeated eigenvalue with one eigenvector. The error then decays like
+`k * rho^k`, not `rho^k`, so any finite measurement window reports slightly more than rho. If
+that is the explanation, the excess must fall as the window grows, at a predictable rate:
+
+```
+window   2700  dev 6.98e-04  predicted by the k*rho^k defective block 6.98e-04
+window   9000  dev 2.09e-04  predicted by the k*rho^k defective block 2.09e-04
+window  27000  dev 6.98e-05  predicted by the k*rho^k defective block 6.98e-05
+```
+
+Three significant figures at every window. The formula is exact; the residual was mine.
+
+**Then the same tool, turned on my own claim.**
+
+In `mnist_five_detector.py` an SGD 5-detector scored 0.9492 on raw 0-255 pixels and 0.9772 on
+`X/255`. Describing that result I offered conditioning as the likely mechanism - in
+conversation, not in this repo, but I offered it. It is wrong, and it is wrong for a reason
+that takes one line of algebra: `Cov(X/255) = Cov(X)/255^2`, so *every* eigenvalue is divided
+equally and the ratio between them cannot move.
+
+```
+raw 0-255  lam_max=3.3272e+05  rank=712  kappa=6.34044150e+09
+X/255      lam_max=5.1169e+00  rank=712  kappa=6.34044144e+09
+kappa ratio 1.000000009 -- identical to 9 s.f.
+```
+
+Same rank, and a lam_max ratio of exactly 255^2. The 9e-9 discrepancy is floating point.
+
+*A note on how I nearly got this wrong twice.* My first measurement filtered eigenvalues with
+an absolute threshold (`ev > 1e-9`) and reported kappa 6.34e9 against 4.11e8 - a 15x
+difference that would have "confirmed" the hypothesis. An absolute cutoff is not scale
+invariant: scaling moves eigenvalues across it. With a relative tolerance the two agree.
+
+**The actual cause is the learning-rate schedule.**
+
+```
+raw,   optimal (default)     acc=0.9605  epochs=[208, 159, 230]
+X/255, optimal (default)     acc=0.9723  epochs=[29, 25, 31]
+raw,   constant eta0=1e-6    acc=0.9679  epochs=[18, 18, 11]
+X/255, constant eta0=6.5e-2  acc=0.9649  epochs=[10, 14, 8]
+```
+
+scikit-learn's default `learning_rate='optimal'` sets its step from `alpha` and an assumed
+feature scale. At 0-255 that assumption is wrong: it needs roughly 7x the epochs and still
+stops at a worse point. Give both scalings a matched constant step and the gap disappears -
+0.9679 against 0.9649, inside the seed spread. The geometry was never the problem.
+
+Run it:
+
+```bash
+python momentum_and_scaling.py
+```
+
+Part 1 is pure NumPy. Part 2 downloads MNIST on first run into scikit-learn's cache. A full
+run is about 3 minutes, most of it the 208-230 epoch runs on unscaled pixels. Verified
+2026-09-05 on Python 3.13.5, scikit-learn 1.8.0, numpy 2.2.6, pandas 2.3.1.
 
 ## MNIST - three breakages before the lesson
 
