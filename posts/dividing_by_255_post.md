@@ -10,7 +10,7 @@ python 3.13.5 · scikit-learn 1.8.0 · numpy 2.2.6 · pandas 2.3.1 · 2026-09-05
 
 I said dividing MNIST by 255 helps because it improves conditioning. Then I measured it.
 
-Condition number before: 6.34044150e+09. After: 6.34044144e+09. Of course it didn't move. Scaling every pixel by the same constant divides every eigenvalue by the square of that constant, and a ratio can't change.
+Condition number before: 6.34044150e+09. After: 6.34044144e+09. Of course it didn't move. Divide every pixel by 255 and every eigenvalue drops by 255². A ratio can't change.
 
 Scaling does help. Accuracy across 10 seeds goes from 0.9550 ±0.0332 to 0.9757 ±0.0029, eleven times tighter. Just not for the reason I gave. λmax dropped by 255², and SGD's default schedule picks its learning rate without ever looking at your feature scale. It's the step size, not the conditioning.
 
@@ -43,9 +43,9 @@ Exponent 2 is correct as written. If a future run measures eigenvalues of someth
 the data — singular values of `X` itself rather than eigenvalues of `XᵀX` or `cov(X)` — the
 exponent becomes 1 and the sentence must change.
 
-One wording note carried into the draft above: an earlier version read "divides every
-eigenvalue by that constant". It is **the square of** that constant. The ratio argument is
-unaffected, since `c²` cancels either way, but the statement itself would have been wrong.
+One wording note. An earlier draft read "divides every eigenvalue by that constant". It is the
+**square** of that constant, which is why the line now names 255² outright. The ratio argument
+is unaffected either way, since `c²` cancels, but the statement itself would have been wrong.
 
 ## Notes for posting
 
