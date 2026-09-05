@@ -1,0 +1,15 @@
+Telco Churn 7043x21 | churn=0.2654 | tenure==0 rows=11 | dup rows on modelled cols=85
+[1] B23-1 p.229 as printed -> TypeError: Series.truediv() got an unexpected keyword argument 'fill_values'. Did you mean 'fill_value'?
+[2] B23-2 NaN after fill_value=0.0: 11 rows | DiffCharges range [-18.90,19.13] vs [-18.90,80.85]
+    rows those 11 NaNs move into a different BIN: 7030/7043  (excluding the 11 themselves: 7019/7032)
+[3] B23-3 train edges ['-0.45', '18.00', '36.45', '54.90', '73.35']
+          test  edges ['1.83', '21.59', '41.34', '61.09', '80.85']  -> identical? False
+    book's OneHotEncoder(drop='if_binary') at predict -> ValueError: Found unknown categories ['(-18.024, 1.83]', '(1.83, 21.585]', '(61.095, 80.85]'] in column 11
+    handle_unknown='ignore' instead: 1409/1409 test rows get an all-zero bucket - feature gone at serve time
+[4] majority-class baseline              acc=0.7346  recall=0.0000
+    no DiffCharges feature at all        acc=0.8053+/-0.0051 recall=0.5487+/-0.0046 n_iter=[30, 28, 23, 29, 28]
+    working guard + pd.cut (p.230)       acc=0.8018+/-0.0065 recall=0.5936+/-0.0192 n_iter=[28, 24, 28, 32, 31]
+    working guard + KBinsDiscretizer     acc=0.8040+/-0.0078 recall=0.5444+/-0.0110 n_iter=[28, 24, 28, 32, 31]
+[5] The engineered feature buys nothing: dropping DiffCharges beats pd.cut on 5/5 seeds, and only
+    3/5 vs KBinsDiscretizer (+0.0013, inside the seed spread). pd.cut leads on recall solely because
+    every test row lost the feature (see [3]) - a shifted threshold, not a model. All beat 0.7346.

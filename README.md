@@ -32,6 +32,8 @@ One focused Python exercise per day. Each file is self-contained and runnable: `
 | — | keras_lr_silent_default.py | The book's compile line does not run, and the obvious repair is not the book's model (*Deep Learning Illustrated*, Krohn, Beyleveld & Bassens, ch. 8, Examples 8.1-8.2, pp. 127-128). `SGD(lr=0.1)` raises `ValueError: Argument(s) not recognized: {'lr': 0.1}` on Keras 3.15.1 - `lr` was removed. The message names the argument it rejected but not `learning_rate`, which replaced it, so "not recognized" reads like "delete this". Deleting it is silent: SGD falls back to `learning_rate=0.01`, a tenth of the book's value, with no warning and no error. Trained on MNIST at seed 19 for the book's 20 epochs, keeping 0.1 gives val_acc **0.9752** and dropping the argument gives **0.9467**, a **0.0285** gap - and 10 epochs to reach what the book's rate reaches in 1. The architecture itself is untouched: 4,160 parameters in the second Dense layer, exactly as printed on p. 127, and the book's own figures still hold (92.34% to a measured 92.78% at epoch 1, ~97.6% to 97.52% at epoch 20). The book was right. Its code just stopped running. [VS Code run](screenshots/keras_lr_silent_default.png) |
 | — | kmeans_ninit_default.py | The book never passes `n_init`, so its line inherits scikit-learn's default — and that default changed from `10` to `'auto'` in v1.4 (*50 Algorithms Every Programmer Should Know*, Imran Ahmad, Packt, ch. 6, `Unsupervised_Machine_Learning_Algorithms.ipynb` cell 5: `cluster.KMeans(n_clusters=2)`). Fitted rather than read from the docs, `'auto'` resolves to **1** under the default `init='k-means++'` and to **10** under `init='random'` — one default silently depending on another argument the book also never sets. k-means is only guaranteed a local optimum per restart, so on UCI handwritten digits (1797x64, k=10, ships with scikit-learn; directory source *Datascience public datasets.pdf* p.23) across 30 seeds the printed line lands worse on **28/30**, median gap **+0.40%**, worst seed **+4.58%**. Inertia spread widens from **637.2** to **53,470.4** — the same line is 84x less stable — and mean ARI against the true digit falls **0.6677 to 0.6378**, worst-seed ARI **0.6603 to 0.5628**. No error and no warning in either direction. The change bought real speed (**4.66s to 1.36s** for 30 fits, 3.4x), so the repair is not to revert it but to write the default down: `KMeans(n_clusters=10, n_init=10)`. [VS Code run](screenshots/kmeans_ninit_default.png) |
 
+| 23 | day23_lowcode_pipeline_divzero.py | The book pitches the scikit-learn `Pipeline` as its low-code path, then ends the section with an exercise it never works: convert the hand-written pandas block to a Pipeline (*Low-Code AI*, Stripling & Abel, O'Reilly 2023, ch. 7 pp. 229-230). Worked on the book's own dataset (IBM Telco Customer Churn, 7,043 rows) the conversion turns up three defects. The p.229 listing passes `fill_values` to `.div()`, which is not a pandas keyword, so it raises **TypeError** as printed. Spelling it `fill_value` does not repair it: `fill_value` substitutes for *missing* operands, not division by zero, so the **11** customers with `tenure = 0` - exactly the 11 rows with a blank `TotalCharges`, the case the guard was written for - stay NaN. Those 11 rows are then excluded from the range `pd.cut(bins=5)` measures, which is equal-width, so every edge moves and **7,030 of 7,043** rows land in a different bin. In the Pipeline it becomes fatal: `pd.cut` sits inside a `FunctionTransformer`, which is stateless and never fits, so train edges (`-0.45 ... 73.35`) and test edges (`1.83 ... 80.85`) differ and the book's own `OneHotEncoder(drop='if_binary')` raises **ValueError** at predict time; setting `handle_unknown='ignore'` silences it by giving **1,409 of 1,409** test rows an all-zero bucket. Measured over 5 stratified splits the feature turns out to buy nothing: **0.8053 +/- 0.0051** without it, **0.8018 +/- 0.0065** with the book's `pd.cut`, **0.8040 +/- 0.0078** with a fitted `KBinsDiscretizer`, against a **0.7346** majority-class baseline - dropping it wins 5/5 seeds against the book's version and ties (3/5, +0.0013) against the fitted one. [VS Code run](screenshots/day23_vscode_run.png) |
+
 ## Day 19 - the run
 
 Source: *Machine Learning: The 3 Core Paradigms*, Zarnappa Earnoor - a field guide that
@@ -410,6 +412,124 @@ python day22_geron_example_1_1.py
 
 Downloads Geron's two CSVs on first run and caches them.
 Measured on Python 3.13.5, scikit-learn 1.8.0, pandas 2.3.1.
+
+## Day 23 - the run
+
+Source: *Low-Code AI: A Practical Project-Driven Introduction to Machine Learning*
+(Gwendolyn Stripling & Michael Abel, O'Reilly, 2023), Chapter 7, "Pipelines in
+Scikit-Learn: An Introduction", printed pages 229-230. Dataset: IBM Telco Customer Churn,
+7,043 rows.
+
+Chapter 7 argues for the scikit-learn `Pipeline` as the low-code path - fewer lines,
+composable objects, one thing you can pickle and ship. The argument is correct. The
+chapter then closes with "as an exercise, finish rewriting your model code to use a
+Pipeline," and never works the exercise. This is the exercise, worked.
+
+**The listing does not run.** Page 229 calls `.div(df['tenure'], fill_values=0.0)`.
+pandas has no `fill_values` keyword, and says so:
+
+```
+TypeError: Series.truediv() got an unexpected keyword argument 'fill_values'.
+Did you mean 'fill_value'?
+```
+
+**Spelling it correctly does not fix it.** `fill_value` substitutes for operands that are
+*missing* before a division. It does not guard division *by zero*. The dataset has 11
+customers with `tenure = 0`, and those 11 are exactly the 11 rows with a blank
+`TotalCharges` - the case the guard was written for. They stay NaN.
+
+Eleven rows out of 7,043 is 0.16%, which sounds like a rounding error. It is not, because
+the next line is `pd.cut(df['DiffCharges'], bins=5)`, and `pd.cut` is equal-width: it takes
+the min and the max and divides the distance by five. The 11 NaNs drop out of the max.
+
+```
+DiffCharges range, book guard     [-18.90, 19.13]
+DiffCharges range, working guard  [-18.90, 80.85]
+rows those 11 NaNs move into a different BIN: 7030/7043  (excluding the 11 themselves: 7019/7032)
+```
+
+Every edge moves, so 7,030 of 7,043 rows are bucketed differently - 7,019 of the 7,032
+rows that were never broken in the first place. (Counted on
+`.cat.codes`, the bin index. Comparing the bucket *label* strings gives 7043/7043, but
+label text changes whenever any edge moves, so that comparison saturates and proves
+nothing.)
+
+**In the Pipeline it stops being cosmetic.** `pd.cut` is called inside the function handed
+to `FunctionTransformer`, and `FunctionTransformer` is stateless - there is nothing for it
+to fit. The edges are recomputed from scratch on every call:
+
+```
+train edges ['-0.45', '18.00', '36.45', '54.90', '73.35']
+test  edges ['1.83', '21.59', '41.34', '61.09', '80.85']   identical? False
+```
+
+The same bucket name means one range at fit time and a different range at predict time.
+With the book's own encoder, `OneHotEncoder(drop='if_binary')` with no `handle_unknown`,
+that raises the first time you call `predict`:
+
+```
+ValueError: Found unknown categories ['(-18.024, 1.83]', '(1.83, 21.585]',
+'(61.095, 80.85]'] in column 11
+```
+
+(The script sorts that category list before printing it. scikit-learn builds it from a
+`set`, and Python randomises string hashing per process, so the raw message reorders on
+every run - which would make the committed log unreproducible.)
+
+Set `handle_unknown='ignore'` to make the error go away and it goes away in the worst
+available manner: **1,409 of 1,409 test rows** get an all-zero bucket block. The model is
+trained with the feature and served without it.
+
+**Then the feature itself, measured.** Five stratified 80/20 splits, mean +/- std:
+
+```
+                                        accuracy            recall
+majority-class baseline                 0.7346              0.0000
+no DiffCharges feature at all           0.8053 +/- 0.0051   0.5487 +/- 0.0046
+working guard + pd.cut (p.230)          0.8018 +/- 0.0065   0.5936 +/- 0.0192
+working guard + KBinsDiscretizer        0.8040 +/- 0.0078   0.5444 +/- 0.0110
+```
+
+Dropping the engineered feature beats the book's `pd.cut` version on 5 of 5 seeds. Against
+the correctly fitted `KBinsDiscretizer` it wins only 3 of 5, by `+0.0013` - inside the seed
+spread, so that pair is a tie rather than a win. All three beat the baseline.
+
+Two details worth stating rather than hiding. The two `pd.cut` and `KBinsDiscretizer` rows
+print identical `n_iter` because, on this data, equal-width `pd.cut(5)` and
+`KBinsDiscretizer(strategy='uniform', n_bins=5)` fit the *same* training bins - the two
+models are numerically the same (coefficients agree to 2e-14). They differ only in what
+happens at serving time, which is the whole point. And the split is not deduplicated: 85 of
+7,043 rows are duplicates on the columns the model actually consumes, so roughly a dozen
+test rows per seed have a twin in training. That is well below the seed spread and does not
+change the ranking, but it is in the data.
+
+**One trap in my own first draft, since it is the same class of error.** The middle row has
+the best recall, 0.5936 against 0.5487, and I nearly wrote that down as a result. It is
+not one: that model's bucket feature is zeroed for every single test row, so what the
+number reflects is a shifted decision threshold, not a better model. I had also added
+`handle_unknown='ignore'` myself and then reported the resulting warning as scikit-learn's
+behaviour, when the book's own code raises loudly - manufacturing the silence I was
+describing. Both were caught by an audit pass before this was published, as was the unreproducible
+log line above.
+
+**What it generalises to.** Not "books have typos." The narrower point: a stateless
+transform inside a `Pipeline` looks fitted and isn't. If a step derives anything from the
+distribution - bin edges, quantiles, category lists - it has to be a real transformer with
+a `fit`, or it will silently mean something different in training than at serving time.
+scikit-learn ships `KBinsDiscretizer` for this; the book does use it, one chapter later, on
+an unrelated car-price project, and never connects it back to this listing.
+
+Negative result, published as-is: fixing all three defects buys no accuracy. What it buys
+is a feature that means the same thing on both sides of `fit`.
+
+Run it yourself:
+
+```bash
+python day23_lowcode_pipeline_divzero.py
+```
+
+Needs `telco_churn.csv` in the working directory (IBM Telco Customer Churn, linked in the
+script header). Measured on Python 3.13.5, pandas 2.3.1, scikit-learn 1.8.0, numpy 2.2.6.
 
 ## Marietta housing - an end-to-end project, and the leak inside it
 
