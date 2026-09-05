@@ -492,6 +492,8 @@ second would have been a preprocessing artefact dressed up as a finding.
 *The `prec=0.0000` on the baseline row is a display convention (`zero_division=0`). Precision
 is undefined for a model that makes no positive predictions, not zero.*
 
+![Zero of sixty thousand](screenshots/zero_of_sixty_thousand.png)
+
 Run it:
 
 ```bash
