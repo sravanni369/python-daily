@@ -34,6 +34,8 @@ One focused Python exercise per day. Each file is self-contained and runnable: `
 
 | 23 | day23_lowcode_pipeline_divzero.py | The book pitches the scikit-learn `Pipeline` as its low-code path, then ends the section with an exercise it never works: convert the hand-written pandas block to a Pipeline (*Low-Code AI*, Stripling & Abel, O'Reilly 2023, ch. 7 pp. 229-230). Worked on the book's own dataset (IBM Telco Customer Churn, 7,043 rows) the conversion turns up three defects. The p.229 listing passes `fill_values` to `.div()`, which is not a pandas keyword, so it raises **TypeError** as printed. Spelling it `fill_value` does not repair it: `fill_value` substitutes for *missing* operands, not division by zero, so the **11** customers with `tenure = 0` - exactly the 11 rows with a blank `TotalCharges`, the case the guard was written for - stay NaN. Those 11 rows are then excluded from the range `pd.cut(bins=5)` measures, which is equal-width, so every edge moves and **7,030 of 7,043** rows land in a different bin. In the Pipeline it becomes fatal: `pd.cut` sits inside a `FunctionTransformer`, which is stateless and never fits, so train edges (`-0.45 ... 73.35`) and test edges (`1.83 ... 80.85`) differ and the book's own `OneHotEncoder(drop='if_binary')` raises **ValueError** at predict time; setting `handle_unknown='ignore'` silences it by giving **1,409 of 1,409** test rows an all-zero bucket. Measured over 5 stratified splits the feature turns out to buy nothing: **0.8053 +/- 0.0051** without it, **0.8018 +/- 0.0065** with the book's `pd.cut`, **0.8040 +/- 0.0078** with a fitted `KBinsDiscretizer`, against a **0.7346** majority-class baseline - dropping it wins 5/5 seeds against the book's version and ties (3/5, +0.0013) against the fitted one. [VS Code run](screenshots/day23_vscode_run.png) |
 
+| MNIST | mnist_five_detector.py | Chapter 3 of *Hands-On Machine Learning* (Aurelien Geron, O'Reilly, 1st ed, **p.113**) opens by fetching MNIST and building a "5-detector", to teach that accuracy is the wrong metric when one class is rare. Three things break before you reach the lesson. `from sklearn.datasets import fetch_mldata` raises **ImportError** - removed in scikit-learn 0.22 after mldata.org went offline. The replacement, `fetch_openml`, returns a **DataFrame** by default, so the book's `some_digit = X[36000]` is read as a column name and raises **KeyError: 36000**. And `fetch_openml` returns labels as **strings**, so the book's `y_train == 5` compares str to int and yields **0 positives out of 60,000** with no error and no warning - the failure only appears later inside `fit()`, as *"The number of classes has to be greater than one"*, which blames the model rather than the label line three lines above. After `astype(np.uint8)` there are 5,421 fives in train and 892 in test, and the chapter's lesson lands: a never-5 classifier scores **0.9108**, an SGD 5-detector on unscaled pixels scores **0.9492** at seed 42 - but across seeds 0-9 that same model ranges **0.8612-0.9720**, and the worst seed loses to the do-nothing baseline. Recall separates them every time; accuracy does not. [VS Code run](screenshots/mnist_five_detector_run.png) |
+
 ## Day 19 - the run
 
 Source: *Machine Learning: The 3 Core Paradigms*, Zarnappa Earnoor - a field guide that
@@ -412,6 +414,93 @@ python day22_geron_example_1_1.py
 
 Downloads Geron's two CSVs on first run and caches them.
 Measured on Python 3.13.5, scikit-learn 1.8.0, pandas 2.3.1.
+
+## MNIST - three breakages before the lesson
+
+Source: *Hands-On Machine Learning with Scikit-Learn and TensorFlow* (Aurelien Geron,
+O'Reilly, 1st edition), Chapter 3, **printed page 113**. Data: `fetch_openml('mnist_784',
+version=1)`, 70,000 x 784.
+
+Chapter 3 builds a "5-detector" for one reason: to show that accuracy is meaningless when one
+class is rare. Run the printed listing today and you never get there.
+
+**1. The chapter's first line does not import.**
+
+```
+ImportError: cannot import name 'fetch_mldata' from 'sklearn.datasets'
+```
+
+`fetch_mldata` was removed in scikit-learn 0.22 after mldata.org went offline (changelog; the
+run here only demonstrates that it is absent in 1.8.0).
+
+**2. The replacement changes the type, and the book's next line means something else.**
+
+`fetch_openml` returns a pandas DataFrame by default (the `as_frame` default changed in 0.24).
+The book's `some_digit = X[36000]` was a row lookup on a NumPy array; on a DataFrame it is a
+*column* name:
+
+```
+KeyError: 36000 -- the book meant row 36000; pandas looked for a column
+```
+
+**3. The one that matters is silent.**
+
+`fetch_openml` returns the labels as strings. The book's next step is
+`y_train_5 = (y_train == 5)` - comparing `str` to `int`:
+
+```
+(y_train == 5)   -> 0 positives of 60000, and no warning is raised
+(y_train == '5') -> 5421 positives -- the labels were strings all along
+```
+
+Zero positives out of sixty thousand, no exception, no warning. It surfaces only later:
+
+```
+fit() objects at last, but blames the model:
+"The number of classes has to be greater than one; got 1 class"
+```
+
+That message points at the estimator. The defect is three lines earlier, in the label
+construction. Nothing checks the label line itself.
+
+**Fix the labels and the lesson finally lands.**
+
+```
+after astype(uint8): 5421 fives in train, 892 in test (8.92% of it)
+
+never-5 baseline                     acc=0.9108  prec=0.0000  rec=0.0000
+SGD, unscaled pixels, seed 42        acc=0.9492  prec=0.6619  rec=0.8800
+same model, seeds 0-9: acc 0.8612-0.9720 -- the worst seed loses to the baseline
+SGD, X/255, seed 42                  acc=0.9772  prec=0.8888  rec=0.8509
+```
+
+Three things worth saying plainly about that table.
+
+Accuracy puts seed 42 **3.8 points** above a classifier that has learned nothing. That sounds
+decisive. Rerun it: across ten seeds the same code ranges 0.8612 to 0.9720, and at the worst
+seed the do-nothing baseline **wins outright**. One seed was never a result.
+
+Recall is not fooled at any seed. The baseline scores 0.0000 every time, because it never
+predicts a 5. That is the chapter's whole argument, and it survives the seed sweep that
+accuracy does not.
+
+The precision of 0.6619 is not a property of SGD - it is a property of feeding it raw 0-255
+pixels, which is where the book leaves them. Scaled to `X/255` the same estimator at the same
+seed reaches 0.9772 accuracy at 0.8888 precision. Reporting the first number without the
+second would have been a preprocessing artefact dressed up as a finding.
+
+*The `prec=0.0000` on the baseline row is a display convention (`zero_division=0`). Precision
+is undefined for a model that makes no positive predictions, not zero.*
+
+Run it:
+
+```bash
+python mnist_five_detector.py
+```
+
+First run downloads MNIST (~20s) into scikit-learn's own cache; later runs read that cache.
+The ten-seed sweep makes a full run about 2m45s. Verified 2026-09-05 on Python 3.13.5,
+scikit-learn 1.8.0, numpy 2.2.6, pandas 2.3.1.
 
 ## Day 23 - the run
 

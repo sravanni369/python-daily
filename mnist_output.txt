@@ -1,0 +1,19 @@
+[1] B24-1  the line the chapter opens with, p.113
+    ImportError: cannot import name 'fetch_mldata' from 'sklearn.datasets' (C:\Users\laksh\AppData\Local\Programs\Python\Python313\Lib\site-packages\sklearn\datasets\__init__.py)
+[2] B24-2  the replacement, called with the defaults the book would have used
+    fetch_openml(...) returns a DataFrame, so X[36000] names a column
+    KeyError: 36000 -- the book meant row 36000; pandas looked for a column
+[3] B24-3  MNIST (70000, 784), label dtype=object, first five ['5', '0', '4', '1', '9']
+    (y_train == 5)   -> 0 positives of 60000, and no warning is raised
+    (y_train == '5') -> 5421 positives -- the labels were strings all along
+    fit() objects at last, but blames the model: "The number of classes has to be greater than one; got 1 class"
+[4] fixed labels, and the lesson the chapter was trying to teach
+    after astype(uint8): 5421 fives in train, 892 in test (8.92% of it) -- so never-5 scores 0.9108
+    never-5 baseline                     acc=0.9108  prec=0.0000  rec=0.0000
+    SGD, unscaled pixels, seed 42        acc=0.9492  prec=0.6619  rec=0.8800
+    same model, seeds 0-9: acc 0.8612-0.9720 -- the worst seed loses to the baseline
+    SGD, X/255, seed 42                  acc=0.9772  prec=0.8888  rec=0.8509
+[5] Accuracy puts the seed-42 model 3.8 points above the do-nothing baseline, which
+    sounds decisive until you rerun it: across ten seeds on unscaled pixels the worst draw drops to
+    0.8612 and loses outright. Recall never confuses the two - the baseline scores 0.0000 every
+    time. That is the chapter's point, reached only after fixing three defects to get there.
