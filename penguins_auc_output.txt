@@ -1,0 +1,18 @@
+tf 2.21.0 keras 3.15.1 sklearn 1.9.0 numpy 2.5.1 pandas 3.0.5
+penguins 344 rows, 2 dropped (no measurements) -> 342 | Chinstrap 68 = 0.199 | majority-class acc 0.8012
+[1] p.292 num_thresholds=200 -> 200 thresholds, 198 inside [0,1]: -1.0e-07, 0.005025, 0.010050 ... 0.994975, 1.0000001
+[2] weak model (body_mass_g, flipper_length_mm) | 69-row stratified test, 14 positives | 10 seeds
+    p.289 at 0.5, seed0: keras P/R 0.3333/0.0714 = sklearn 0.3333/0.0714 | acc 0.7826 vs majority 0.7971
+    seed0 ROC exact 0.7221 grid-exact n10:-0.0344 n50:-0.0084 n200:+0.0006 n1000:+0.0013 n10000:+0.0000 | PR: AP 0.3507 trapezoid 0.3190 keras200 0.3217 keras10000 0.3214
+    seed1 ROC exact 0.7695 grid-exact n10:-0.0110 n50:+0.0052 n200:+0.0013 n1000:-0.0000 n10000:-0.0000 | PR: AP 0.4080 trapezoid 0.3680 keras200 0.3761 keras10000 0.3731
+    seed2 ROC exact 0.7013 grid-exact n10:-0.0305 n50:-0.0045 n200:-0.0019 n1000:+0.0000 n10000:-0.0000 | PR: AP 0.2963 trapezoid 0.2764 keras200 0.2754 keras10000 0.2768
+    seed3 ROC exact 0.6526 grid-exact n10:-0.0409 n50:-0.0039 n200:-0.0032 n1000:+0.0000 n10000:+0.0000 | PR: AP 0.3548 trapezoid 0.3368 keras200 0.3356 keras10000 0.3379
+    seed4 ROC exact 0.9032 grid-exact n10:-0.0571 n50:-0.0006 n200:-0.0013 n1000:-0.0006 n10000:+0.0000 | PR: AP 0.6363 trapezoid 0.5988 keras200 0.6030 keras10000 0.6044
+    seed5 ROC exact 0.7532 grid-exact n10:-0.0130 n50:+0.0026 n200:+0.0013 n1000:-0.0000 n10000:-0.0000 | PR: AP 0.3933 trapezoid 0.3541 keras200 0.3533 keras10000 0.3593
+    seed6 ROC exact 0.7221 grid-exact n10:-0.0169 n50:-0.0013 n200:+0.0000 n1000:+0.0000 n10000:-0.0000 | PR: AP 0.3137 trapezoid 0.2881 keras200 0.2891 keras10000 0.2892
+    seed7 ROC exact 0.8110 grid-exact n10:-0.0578 n50:-0.0032 n200:-0.0006 n1000:-0.0000 n10000:+0.0000 | PR: AP 0.4736 trapezoid 0.4530 keras200 0.4532 keras10000 0.4540
+    seed8 ROC exact 0.6403 grid-exact n10:-0.0292 n50:+0.0000 n200:+0.0000 n1000:+0.0006 n10000:-0.0000 | PR: AP 0.2557 trapezoid 0.2370 keras200 0.2371 keras10000 0.2374
+    seed9 ROC exact 0.6818 grid-exact n10:-0.0032 n50:+0.0052 n200:-0.0006 n1000:-0.0013 n10000:-0.0000 | PR: AP 0.3027 trapezoid 0.2736 keras200 0.2751 keras10000 0.2756
+[3] ROC  mean |grid - exact| n10:0.0294 n50:0.0035 n200:0.0011 n1000:0.0004 n10000:0.0000 -> shrinks with the grid; 200 is a grid effect and a small one
+[3] PR   AP 0.3785+/-0.1047 | trapezoid-AP -0.0280 | keras200-AP -0.0266 | keras10000-AP -0.0256, below AP on 10/10 seeds -> does not converge to AP: a different estimator, not a grid error
+[4] control, all four features, seeds 0-2: AP 1.0000 keras200 1.0000 | AP 1.0000 keras200 1.0000 | AP 1.0000 keras200 1.0000 -> a perfect model hides the gap

@@ -37,6 +37,7 @@ One focused Python exercise per day. Each file is self-contained and runnable: `
 | MNIST | mnist_five_detector.py | Chapter 3 of *Hands-On Machine Learning* (Aurelien Geron, O'Reilly, 1st ed, **p.113**) opens by fetching MNIST and building a "5-detector", to teach that accuracy is the wrong metric when one class is rare. Three things break before you reach the lesson. `from sklearn.datasets import fetch_mldata` raises **ImportError** - removed in scikit-learn 0.22 after mldata.org went offline. The replacement, `fetch_openml`, returns a **DataFrame** by default, so the book's `some_digit = X[36000]` is read as a column name and raises **KeyError: 36000**. And `fetch_openml` returns labels as **strings**, so the book's `y_train == 5` compares str to int and yields **0 positives out of 60,000** with no error and no warning - the failure only appears later inside `fit()`, as *"The number of classes has to be greater than one"*, which blames the model rather than the label line three lines above. After `astype(np.uint8)` there are 5,421 fives in train and 892 in test, and the chapter's lesson lands: a never-5 classifier scores **0.9108**, an SGD 5-detector on unscaled pixels scores **0.9492** at seed 42 - but across seeds 0-9 that same model ranges **0.8612-0.9720**, and the worst seed loses to the do-nothing baseline. Recall separates them every time; accuracy does not. [VS Code run](screenshots/mnist_five_detector_run.png) |
 
 | Momentum | momentum_and_scaling.py | *Why Momentum Really Works* (Gabriel Goh, Distill, 4 Apr 2017) derives closed-form convergence rates for a convex quadratic with condition number k: **(k-1)/(k+1)** for gradient descent, **(sqrt(k)-1)/(sqrt(k)+1)** for momentum at its optimal alpha and beta. Measured against real runs on quadratics with known eigenvalues, GD matches to **9.3e-15** across k = 10 to 10,000. Momentum sits ~8e-4 above prediction - not an error in the formula but a finite-window artefact: at critical damping the 2x2 block is defective, so error decays like **k*rho^k** and any finite measurement window overestimates rho. Predicted artefact and measured deviation agree to 3 s.f. at every window (6.98e-04, 2.09e-04, 6.98e-05 as the window grows 2,700 -> 27,000). The second half turns the same tool on my own claim: I had suggested that `X/255` helps the MNIST 5-detector because it improves conditioning. **It does not.** Uniform scaling divides every eigenvalue of the covariance by exactly 255^2, so k is invariant - measured **6.34044150e+09** raw against **6.34044144e+09** scaled at the same rank 712, equal to the ~7 s.f. `eigvalsh` resolves at that magnitude. The real cause is scikit-learn's default `learning_rate='optimal'`, whose step derives from `alpha` alone with no reference to feature scale. Over 10 seeds it scores **0.9550 +/- 0.0332** on raw pixels against **0.9757 +/- 0.0029** scaled - not just lower but **11x less stable** - and matched constant steps erase the gap (0.9690 +/- 0.0062 vs 0.9644 +/- 0.0119). [VS Code run](screenshots/momentum_and_scaling_run.png) |
+| — | penguins_auc_grid.py | The book's AUC listing, run as printed on a real skewed dataset - and "AUC-PR" turns out to be three different numbers (*Practical Machine Learning for Computer Vision*, Lakshmanan, Görner & Gillard, O'Reilly 2021, ch. 8 "Metrics for Classification", pp. 287-292). p.291 says AUC comes from "a grid of two hundred equally spaced thresholds"; p.292 says use AUC-PR when classes are skewed. Data: Palmer Penguins (CC0), 342 rows, positive class Chinstrap at **19.9%**, features kept deliberately weak so the model is imperfect. **ROC: the grid claim holds.** Mean |Keras grid AUC - `roc_auc_score`| over 10 seeds is **0.0294 / 0.0035 / 0.0011 / 0.0004 / 0.0000** at 10 / 50 / 200 / 1,000 / 10,000 thresholds - it converges, and the 200 default is a small grid effect (worst seed 0.0032). **PR: it is not a grid effect.** `tf.keras.metrics.AUC(curve="PR", summation_method="interpolation")` sits below scikit-learn's `average_precision_score` on **10/10 seeds**, mean **-0.0266** at 200 thresholds and **-0.0256** at 10,000 - raising the grid 50x moves it 0.001, because Keras interpolates the curve (its source cites Davis & Goadrich 2006) while AP is a step sum; scikit-learn's trapezoid `auc(recall, precision)` is a third number, -0.0280 from AP. Seed 0: **0.3507 / 0.3190 / 0.3217** for the same 69 predictions. Precision and Recall at 0.5 agree to four decimals; only the area disagrees. With all four features every estimator prints 1.0000 - a perfect model hides the gap. Needs TensorFlow; the book was right, it just never said which AUC-PR. [VS Code run](screenshots/penguins_auc_grid_run.png) |
 
 ## Day 19 - the run
 
@@ -738,6 +739,81 @@ python day23_lowcode_pipeline_divzero.py
 
 Needs `telco_churn.csv` in the working directory (IBM Telco Customer Churn, linked in the
 script header). Measured on Python 3.13.5, pandas 2.3.1, scikit-learn 1.8.0, numpy 2.2.6.
+
+## AUC-PR is three numbers - the book's metric listing on a real skewed dataset
+
+Source: *Practical Machine Learning for Computer Vision* (Lakshmanan, Görner & Gillard,
+O'Reilly 2021), Chapter 8, "Metrics for Classification", **printed pages 287-292**.
+Data: Palmer Penguins (CC0), `penguins.csv` from the URL in the script header, 344 rows, 2
+dropped for missing measurements. Positive class Chinstrap, 68 of 342 = 19.9%.
+
+Page 291 says the curve is built on "a grid of two hundred equally spaced thresholds"; page
+292 gives the listing and says AUC-PR is the choice when classes are skewed. Both claims are
+testable, so the listing was run with its printed arguments on real predictions and held
+against scikit-learn.
+
+**The setup is deliberately weak.** Two features, body mass and flipper length, so the model
+is imperfect (ROC 0.64-0.90 across seeds). With all four measurements it separates Chinstrap
+perfectly and every estimator prints 1.0000, which shows nothing. 10 stratified 80/20 splits,
+69 test rows, 14 positives each.
+
+**1. The ROC claim holds.** Mean absolute gap between the Keras grid and `roc_auc_score`:
+
+```
+num_thresholds      10      50     200    1000   10000
+mean |grid-exact|  0.0294  0.0035  0.0011  0.0004  0.0000
+```
+
+It converges. The book's default of 200 costs at most 0.0032 on the worst seed. Also
+checked: `num_thresholds=200` produces 200 thresholds of which 198 lie inside [0, 1]; the two
+end points are sentinels at -1e-7 and 1+1e-7.
+
+**2. The PR number is not a grid effect.** Same predictions, seed 0:
+
+```
+scikit-learn average_precision_score      0.3507
+scikit-learn auc(recall, precision)       0.3190
+Keras AUC(curve="PR"), 200 thresholds     0.3217
+Keras AUC(curve="PR"), 10,000 thresholds  0.3214
+```
+
+Over 10 seeds Keras is below AP by 0.0266 at 200 thresholds and 0.0256 at 10,000, below on
+10 of 10. Fifty times more thresholds moves it by 0.001. It is not converging to average
+precision because it is not estimating average precision: the Keras source
+(`keras/src/metrics/confusion_metrics.py`, `interpolate_pr_auc`) describes its formula as
+"inspired by section 4 of Davis & Goadrich 2006" and interpolates true and false positives
+linearly within each bucket, while AP is the step-wise sum of precision times the change in
+recall. The trapezoid is a third estimator. All three are defensible; none of them is "the"
+AUC-PR, and the book does not say which one its listing computes.
+
+The mean AP is 0.3785 with a seed spread of +/-0.1047, so the seed spread is four times the
+estimator gap. The spread is noise; the gap is bias, same sign on every seed, about 7% of
+the number.
+
+**3. The p.289 argument reproduces.** Keras `Precision()` / `Recall()` at 0.5 match scikit-learn
+to four decimals (0.3333 / 0.0714 on seed 0). Accuracy at 0.5 is 0.7826 against a
+majority-class 0.7971 - the weak model loses to do-nothing on accuracy, which is the book's own
+retinal-screening point.
+
+**Honest limits.** On the two coarse features (25 g mass steps, whole-millimetre flipper), 37
+rows collide with another row and roughly 12 of 69 test rows per seed have an identical
+feature pair in training; 0 rows collide on all four measurements, and 11 of the colliding
+groups carry conflicting labels, so this is measurement granularity, not the same bird twice.
+A two-feature logistic regression cannot memorise them, and the estimator comparison is on
+the same predictions either way, but the AP levels above should be read with that in mind.
+The gap sizes are specific to a 69-row test set; on a large one all three estimators approach
+each other.
+
+![AUC-PR is three numbers](screenshots/penguins_auc_grid.png)
+
+Run it:
+
+```bash
+python penguins_auc_grid.py
+```
+
+Needs `penguins.csv` in the working directory and TensorFlow. Measured on TensorFlow 2.21.0,
+Keras 3.15.1, scikit-learn 1.9.0, numpy 2.5.1, pandas 3.0.5, Python 3.13.
 
 ## Marietta housing - an end-to-end project, and the leak inside it
 
